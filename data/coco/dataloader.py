@@ -1,6 +1,7 @@
 from pycocotools.coco import COCO
 import numpy as np
-import torchvision.datasets.CocoDetection
+from torchvision import datasets
+
 coco_classes = ['person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat',
         'traffic light',
         'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep',
@@ -27,5 +28,5 @@ def coco_dataloader():
     """
     data_dir = 'data/coco/val2017'
     ann_file = 'data/coco/annotations/instances_val2017.json'
-    dataset = torchvision.datasets.CocoDetection(root=data_dir, annFile=ann_file)
+    dataset = datasets.CocoDetection(root=data_dir, annFile=ann_file)
     return dataset

@@ -17,7 +17,7 @@ def main():
     Example of calculating metrics for XAI methods on YOLOX model with COCO dataset
     :return:
     """
-    image_path = 'example.jpg'
+    image_path = 'data/coco/val2017/000000000139.jpg'
     model = models.yolox_l(pretrained=True)
     transform = data_augment.ValTransform(legacy=False)
     org_img = cv2.imread(image_path)
