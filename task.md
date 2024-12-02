@@ -1,3 +1,3 @@
 # 20241202 tasks
-[] Create virtual environment to work with xaiod. \n
-[] Remember to create new branch (dev1).
+- [x] Create new branch (dev1). <br>
+- [] Create virtual environment to work with xaiod. 
