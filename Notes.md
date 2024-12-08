@@ -21,3 +21,10 @@
 - Solution: 
     + In modern Werkzeug versions, the Local class is available under werkzeug.local.
     + from werkzeug.local import Local
+
+# ModuleNotFoundError: No module named 'tool'
+- Currently, there are errors with "from tool import get_prediction, bbox_iou" in dclose.py
+- Properly missing some files or wrong path
+- If use "pip install tool", the "tool" installed may not be suitable as it is described as "A compact modular conf/web/console framework."
+    + https://pypi.org/project/tool/
+- As a result, a suggestion is to look back on YOLOX and its scripts.
