@@ -28,3 +28,4 @@
 - If use "pip install tool", the "tool" installed may not be suitable as it is described as "A compact modular conf/web/console framework."
     + https://pypi.org/project/tool/
 - As a result, a suggestion is to look back on YOLOX and its scripts.
+- Also, the above 2 errors (No module named 'context_locals' and cannot import name 'Local' from 'werkzeug') are raised after installing "tool." As a result, they may be irrelevant.
