@@ -67,19 +67,15 @@ class MetricEvaluation(object):
         y_min = max(int(y_min), 0)
         x_max = max(int(x_max), 0)
         y_max = max(int(y_max), 0)
-        
-        # Create bounding box mask
-        empty = np.zeros_like(saliency_map)
+        empty = np.zeros(self.img_size)
         empty[y_min:y_max, x_min:x_max] = 1
 
-        # Normalize saliency map
         if saliency_map.max() > 1.:
             saliency_map = (saliency_map - saliency_map.min()) / (saliency_map.max() - saliency_map.min())
 
-        # Compute energies
-        energy_bbox = np.sum(saliency_map * empty)
+        mask_bbox = saliency_map * empty
+        energy_bbox = np.sum(mask_bbox)
         energy_whole = np.sum(saliency_map)
-        
         if energy_whole == 0:
             self.ebpg = 0
         else:
