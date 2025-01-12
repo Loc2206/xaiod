@@ -1,95 +1,68 @@
 import numpy as np
 import torch
+import torchvision
+import math
 import cv2
-from scipy.spatial import distance
 from YOLOX.yolox.utils import postprocess
 import YOLOX.yolox.data.data_augment as data_augment
+from scipy import spatial
+from tqdm import tqdm
 transform = data_augment.ValTransform(legacy=False)
-import math
-from torchvision.ops import box_iou
-from sklearn.metrics import auc as sklearn_auc
-from config import device
 
-def del_ins(model, org_img, box, saliency_map, mode='del', step=100, kernel_width=0.25):
-    """
-    Calculate the Deletion or Insertion metric for object detection.
-    
-    Parameters:
-        - model: PyTorch nn.Module, the pretrained YOLOX model.
-        - org_img: np.ndarray, original input image (H, W, 3).
-        - box: torch.Tensor, predicted bounding boxes and scores.
-        - saliency_map: np.ndarray, saliency map for each detected object (num_boxes, H, W).
-        - mode: str, either 'del' (deletion) or 'ins' (insertion).
-        - step: int, number of pixels modified per iteration.
-        - kernel_width: float, control parameter for weighting.
-    
-    Returns:
-        - del_ins: np.ndarray, aggregated deletion/insertion scores for each detected class.
-        - count: np.ndarray, number of objects per class.
-    """
-    num_classes = 80  # Assume COCO dataset
-    del_ins = np.zeros(num_classes)
-    count = np.zeros(num_classes)
 
-    H, W, C = org_img.shape
-    HW = H * W
-    n_steps = (HW + step - 1) // step  # Number of modification steps
+def auc(arr):
+    """Returns normalized Area Under Curve of the array."""
+    return (arr.sum() - arr[0] / 2 - arr[-1] / 2) / (arr.shape[0] - 1)  # auc formula
 
-    for idx in range(len(saliency_map)):
-        target_cls = int(box[idx][-1])  # Class ID for the current object
 
-        # Initialize start and finish images based on the mode
+def del_ins(model, img, bbox, saliency_map, mode='del', step=2000, kernel_width=0.25):
+    del_ins = np.zeros(80)
+    count = np.zeros(80)
+    HW = saliency_map.shape[1] * saliency_map.shape[2]
+    n_steps = (HW + step - 1) // step
+    for idx in range(saliency_map.shape[0]):
+        target_cls = bbox[idx][-1]
         if mode == 'del':
-            start = org_img.copy()
+            start = img.copy()
             finish = np.zeros_like(start)
-        else:  # 'ins'
-            start = cv2.GaussianBlur(org_img, (51, 51), 0)
-            finish = org_img.copy()
-
-        # Flatten the saliency map and sort pixels by importance
-        salient_order = np.argsort(-saliency_map[idx].flatten())
+        else:
+            start = cv2.GaussianBlur(img, (51, 51), 0)
+            finish = img.copy()
+        salient_order = np.flip(np.argsort(saliency_map[idx].reshape(HW, -1), axis=0), axis=0)
+        y = salient_order // img.shape[1]
+        x = salient_order - y * img.shape[1]
         scores = np.zeros(n_steps + 1)
-
         with torch.no_grad():
-            for i in range(n_steps + 1):
-                # Get the current set of pixels to modify
-                indices = salient_order[step * i: step * (i + 1)]
-                y_coords, x_coords = np.unravel_index(indices, (H, W))
-
-                # Modify pixels based on the mode
-                start[y_coords, x_coords, :] = finish[y_coords, x_coords, :]
-
-                # Transform the modified image to YOLOX input size
-                modified_img, _ = transform(start, None, (640, 640))
-                modified_img = torch.from_numpy(modified_img).unsqueeze(0).float().to(device)
-
-                # Forward pass through the model
-                output = model(modified_img)
-                pred_box, _ = postprocess(output, num_classes=80, conf_thre=0.25, nms_thre=0.45, class_agnostic=True)
-                pred_box = pred_box[0] if pred_box is not None else None
-
-                if pred_box is None:
+            for i in tqdm(range(n_steps + 1)):
+                temp_ious = []
+                temp_score = []
+                torch_start = torch.from_numpy(start.transpose(2, 0, 1)).unsqueeze(0).float()
+                out = model(torch_start.cuda())
+                p_box, index = postprocess(out, num_classes=80, conf_thre=0.25, nms_thre=0.45, class_agnostic=True)
+                p_box = p_box[0]
+                if p_box is None:
                     scores[i] = 0
                 else:
-                    temp_scores = []
-                    for det in pred_box:
-                        det_cls = int(det[-1])  # Detected class
-                        det_box = det[:4]  # Bounding box coordinates
-                        det_score = det[5:-1]  # Confidence scores
-
-                        # Calculate IoU and cosine similarity
-                        iou = box_iou(det_box.unsqueeze(0), box[idx][:4].unsqueeze(0)).cpu().item()
-                        distances = distance.cosine(det_score.cpu(), box[idx][5:-1].cpu())
-                        weight = math.exp(-(distances ** 2) / (kernel_width ** 2)) if det_cls == target_cls else 0
-
-                        # Weighted score
-                        temp_scores.append(iou * weight)
-
-                    # Use the maximum score for this step
-                    scores[i] = max(temp_scores, default=0)
-
-        # Update class-specific metrics
-        del_ins[target_cls] += sklearn_auc(scores)
-        count[target_cls] += 1
-
+                    for b in p_box:
+                        sample_cls = b[-1]
+                        sample_box = b[:4]
+                        sample_score = b[5:-1]
+                        iou = torchvision.ops.box_iou(sample_box[:4].unsqueeze(0),
+                                                      bbox[idx][:4].unsqueeze(0)).cpu().item()
+                        distances = spatial.distance.cosine(sample_score.cpu(), bbox[idx][5:-1].cpu())
+                        weights = math.sqrt(math.exp(-(distances ** 2) / kernel_width ** 2))
+                        if target_cls != sample_cls:
+                            iou = 0
+                            sample_score = torch.tensor(0.)
+                        temp_ious.append(iou)
+                        s_score = iou * weights
+                        temp_score.append(s_score)
+                    max_score = temp_score[np.argmax(temp_ious)]
+                    scores[i] = max_score
+                x_coords = x[step * i:step * (i + 1), :]
+                y_coords = y[step * i:step * (i + 1), :]
+                start[y_coords, x_coords, :] = finish[y_coords, x_coords, :]
+        del_ins[int(target_cls)] += auc(scores)
+        count[int(target_cls)] += 1
     return del_ins, count
+    

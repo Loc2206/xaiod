@@ -1,0 +1,13 @@
+data/coco/annotations/*
+data/coco/val2017/*
+data/.DS_Store
+data/coco/.DS_Store
+.idea/
+gcame4Faster-RCNN.ipynb
+gcame4YOLOX.ipynb
+.fleet
+__pycache__/
+pyvenv.cfg
+share/
+bin/
+lib/

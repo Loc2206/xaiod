@@ -9,7 +9,7 @@ from PIL import Image
 from scipy import spatial
 from skimage.segmentation import slic
 import tqdm
-from tool import get_prediction, bbox_iou
+from xai_methods.tool import get_prediction, bbox_iou
 from yolox.utils import postprocess
 from utils import *
 
